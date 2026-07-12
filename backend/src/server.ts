@@ -23,7 +23,14 @@ app.set("trust proxy", true);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+// CORS_ORIGIN accepts a comma-separated list so production + preview + local
+// frontends can all be allowed from one env var.
+app.use(
+  cors({
+    origin: env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean),
+    credentials: true,
+  }),
+);
 // crossOriginResourcePolicy relaxed so the frontend (a different origin) can
 // load statically-served attachments from the local-disk storage fallback.
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));

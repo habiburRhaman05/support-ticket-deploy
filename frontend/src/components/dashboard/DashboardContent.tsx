@@ -10,11 +10,13 @@ import { useMyStats, useToggleAvailability } from "@/hooks/query/useTeamMembers"
 import { useReviewTickets } from "@/hooks/query/useTickets"
 import { cn } from "@/lib/utils"
 
+// GHL-style stat card: small gray label on top, big bold value under it —
+// mirrors GHL's own Payments summary cards so the embed feels native.
 function StatCard({ label, value, accent }: { label: string; value: number | string; accent?: boolean }) {
   return (
-    <div className={cn("rounded-2xl border p-5", accent ? "bg-black text-white border-black" : "bg-white border-gray-100")}>
-      <p className={cn("text-3xl font-bold", accent ? "text-white" : "text-gray-900")}>{value}</p>
-      <p className={cn("text-[12px] mt-1", accent ? "text-gray-300" : "text-gray-500")}>{label}</p>
+    <div className="rounded-xl border border-gray-200 bg-white p-5">
+      <p className="text-[12.5px] font-medium text-gray-500">{label}</p>
+      <p className={cn("text-[28px] font-bold mt-1.5 leading-none", accent ? "text-blue-600" : "text-gray-900")}>{value}</p>
     </div>
   )
 }

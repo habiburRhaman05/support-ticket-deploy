@@ -82,6 +82,13 @@ export const storageService = {
   /** Upload one file's bytes and return its public URL + storage key. */
   async upload(buffer: Buffer, originalName: string): Promise<StoredFile> {
     if (env.isCloudinaryConfigured) return uploadToCloudinary(buffer, originalName);
+    // Serverless (Vercel) filesystems are read-only/ephemeral — a local-disk
+    // "upload" would 500 or silently vanish. Fail loudly instead.
+    if (env.isProduction) {
+      throw new Error(
+        "Attachment storage is not configured: set the CLOUDINARY_* environment variables in production (local-disk fallback is dev-only).",
+      );
+    }
     return uploadToLocalDisk(buffer, originalName);
   },
 

@@ -1,49 +1,98 @@
 "use client"
 
-import {
-  Bell,
-  CheckCircle2,
-  ClipboardCheck,
-  HeadphonesIcon,
-  Home,
-  Inbox,
-  Kanban,
-  LogOut,
-  Store,
-  UserPlus,
-  Users,
-} from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { formatDistanceToNow } from "date-fns"
+import { Bell, CheckCircle2, ChevronDown, LogOut } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
-import { formatDistanceToNow } from "date-fns"
+import { QUERY_KEYS } from "@/constants"
 import { useAuth } from "@/hooks/auth/useAuth"
 import { useMarkAllAsRead, useNotifications, useUnreadCount } from "@/hooks/query/useNotifications"
 import { cn } from "@/lib/utils"
+import { SubAccountsService } from "@/services/subaccounts.service"
+import { TicketService } from "@/services/ticket.service"
+
+/**
+ * GHL-native top-tab shell. This app is embedded inside GoHighLevel through a
+ * Custom Menu Link, and the client must never feel they left GHL — so no
+ * custom sidebar, no product branding: a white top tab bar, GHL's light gray
+ * canvas, and white bordered cards, exactly like GHL's own Payments pages.
+ */
 
 interface NavItem {
   href: string
   label: string
-  icon: React.ElementType
-  section?: string
+  /** Key into the live counts — renders an attention badge when > 0. */
+  countKey?: "review" | "unassigned" | "requests" | "myActive"
 }
 
 const OWNER_NAV: NavItem[] = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: Home },
-  { href: "/admin/board", label: "Support board", icon: Kanban },
-  { href: "/admin/review", label: "Review queue", icon: ClipboardCheck, section: "Workflow" },
-  { href: "/admin/unassigned", label: "Unassigned", icon: Inbox, section: "Workflow" },
-  { href: "/admin/team", label: "Team", icon: Users, section: "Manage" },
-  { href: "/admin/sub-accounts", label: "Sub-accounts", icon: Store, section: "Manage" },
-  { href: "/admin/requests", label: "Access requests", icon: UserPlus, section: "Manage" },
+  { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin/board", label: "Support board" },
+  { href: "/admin/review", label: "Review queue", countKey: "review" },
+  { href: "/admin/unassigned", label: "Unassigned", countKey: "unassigned" },
+  { href: "/admin/team", label: "Team" },
+  { href: "/admin/sub-accounts", label: "Sub-accounts" },
+  { href: "/admin/requests", label: "Access requests", countKey: "requests" },
 ]
 
 const TEAM_NAV: NavItem[] = [
-  { href: "/team/dashboard", label: "Dashboard", icon: Home },
-  { href: "/team/board", label: "My board", icon: Kanban },
+  { href: "/team/dashboard", label: "Dashboard" },
+  { href: "/team/board", label: "My board", countKey: "myActive" },
 ]
 
-const CLIENT_NAV: NavItem[] = [{ href: "/client/dashboard", label: "My tickets", icon: Kanban }]
+const CLIENT_NAV: NavItem[] = [{ href: "/client/dashboard", label: "My tickets" }]
+
+/**
+ * Live attention counts for the nav badges. Uses the SAME query keys as the
+ * pages themselves so the cache is shared — the Review queue page and its
+ * badge always agree. Polls gently so counts stay fresh while embedded.
+ */
+function useNavCounts(role: { isOwner: boolean; isTeamMember: boolean }) {
+  const shared = { staleTime: 30_000, refetchInterval: 60_000 } as const
+
+  const review = useQuery({
+    queryKey: QUERY_KEYS.REVIEW,
+    queryFn: () => TicketService.getReview(),
+    enabled: role.isOwner,
+    ...shared,
+  })
+  const unassigned = useQuery({
+    queryKey: QUERY_KEYS.UNASSIGNED,
+    queryFn: () => TicketService.getUnassigned(),
+    enabled: role.isOwner,
+    ...shared,
+  })
+  const requests = useQuery({
+    queryKey: QUERY_KEYS.SUB_ACCOUNT_REQUESTS,
+    queryFn: () => SubAccountsService.listRequests(),
+    enabled: role.isOwner,
+    ...shared,
+  })
+  const mine = useQuery({
+    queryKey: QUERY_KEYS.MY_TICKETS,
+    queryFn: () => TicketService.getMine(),
+    enabled: role.isTeamMember,
+    ...shared,
+  })
+
+  return {
+    review: review.data?.length ?? 0,
+    unassigned: unassigned.data?.length ?? 0,
+    requests: requests.data?.length ?? 0,
+    myActive: mine.data?.filter((t: { stage: string }) => t.stage !== "RESOLVED").length ?? 0,
+  }
+}
+
+function CountBadge({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+      {count > 99 ? "99+" : count}
+    </span>
+  )
+}
 
 function NotificationsBell() {
   const [open, setOpen] = useState(false)
@@ -57,10 +106,10 @@ function NotificationsBell() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="relative w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-colors"
+        className="relative w-9 h-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-colors"
         aria-label="Notifications"
       >
-        <Bell className="w-[18px] h-[18px]" />
+        <Bell className="w-[17px] h-[17px]" />
         {count > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
             {count > 9 ? "9+" : count}
@@ -71,7 +120,7 @@ function NotificationsBell() {
       {open && (
         <>
           <button type="button" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} aria-label="Close notifications" />
-          <div className="absolute right-0 top-12 z-50 w-80 bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+          <div className="absolute right-0 top-11 z-50 w-80 bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <span className="text-sm font-semibold text-gray-900">Notifications</span>
               {count > 0 && (
@@ -109,114 +158,117 @@ function NotificationsBell() {
   )
 }
 
+function UserMenu() {
+  const [open, setOpen] = useState(false)
+  const { user, logout, isOwner, isSubAccount } = useAuth()
+  const roleLabel = isOwner ? "Agency Owner" : isSubAccount ? "Client" : "Team Member"
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 h-9 pl-1.5 pr-2 rounded-lg bg-white border border-gray-200 hover:border-gray-300 transition-colors"
+        aria-label="Account menu"
+      >
+        <span className="w-6 h-6 rounded-md bg-blue-600 text-white text-[10.5px] font-bold flex items-center justify-center">
+          {user?.initials}
+        </span>
+        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+      </button>
+
+      {open && (
+        <>
+          <button type="button" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} aria-label="Close menu" />
+          <div className="absolute right-0 top-11 z-50 w-60 bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <p className="text-[13px] font-semibold text-gray-900 truncate">{user?.name}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {roleLabel}
+                {user?.agencyName ? ` · ${user.agencyName}` : ""}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-gray-600 hover:bg-gray-50 hover:text-red-600 transition-colors text-left"
+            >
+              <LogOut className="w-4 h-4" /> Sign out
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function AppShell({
   children,
   title,
   subtitle,
   actions,
+  fullWidth = false,
 }: {
   children: React.ReactNode
   title: string
   subtitle?: string
   actions?: React.ReactNode
+  /** Board views need the whole viewport — skips the GHL content max-width. */
+  fullWidth?: boolean
 }) {
   const pathname = usePathname()
-  const { user, logout, isOwner, isSubAccount } = useAuth()
+  const { isOwner, isTeamMember, isSubAccount } = useAuth()
+  const counts = useNavCounts({ isOwner, isTeamMember })
 
   const nav = isSubAccount ? CLIENT_NAV : isOwner ? OWNER_NAV : TEAM_NAV
-  const roleLabel = isOwner ? "Agency Owner" : isSubAccount ? "Client" : "Team Member"
-
-  // Group nav items by section (undefined section = top ungrouped block).
-  const sections: Array<{ name?: string; items: NavItem[] }> = []
-  for (const item of nav) {
-    const last = sections[sections.length - 1]
-    if (last && last.name === item.section) last.items.push(item)
-    else sections.push({ name: item.section, items: [item] })
-  }
 
   return (
-    <div className="min-h-screen bg-[#F4F5F7] flex">
-      {/* Expanded sidebar — light gray, GHL-style */}
-      <aside className="fixed left-0 top-0 bottom-0 w-[232px] bg-[#ECEEF1] border-r border-gray-200/80 flex flex-col z-30">
-        <div className="px-5 pt-6 pb-5 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
-            <HeadphonesIcon className="w-4 h-4 text-white" />
-          </div>
-          <div className="leading-tight min-w-0">
-            <p className="text-[14px] font-bold text-gray-900 truncate">{user?.agencyName ?? "Support Desk"}</p>
-            <p className="text-[10.5px] text-gray-400">Support Desk</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#F0F4F8]">
+      {/* GHL-style top tab bar — white, full width, segmented tabs */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="px-4 sm:px-6 h-[54px] flex items-center justify-between gap-3">
+          <nav className="flex items-center overflow-x-auto py-2" aria-label="Main">
+            {nav.map((item, i) => {
+              const active = pathname.startsWith(item.href)
+              const count = item.countKey ? counts[item.countKey] : 0
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center whitespace-nowrap h-9 px-3.5 text-[13px] font-medium border transition-colors -ml-px",
+                    i === 0 && "ml-0 rounded-l-lg",
+                    i === nav.length - 1 && "rounded-r-lg",
+                    active
+                      ? "text-blue-600 bg-blue-50/50 border-blue-200 relative z-10"
+                      : "text-gray-600 bg-white border-gray-200 hover:text-gray-900 hover:bg-gray-50",
+                  )}
+                >
+                  {item.label}
+                  <CountBadge count={count} />
+                </Link>
+              )
+            })}
+          </nav>
 
-        <nav className="flex-1 px-3 space-y-5 overflow-y-auto pb-4">
-          {sections.map((section, i) => (
-            <div key={section.name ?? `top-${i}`}>
-              {section.name && (
-                <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">{section.name}</p>
-              )}
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const active = pathname.startsWith(item.href)
-                  const Icon = item.icon
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors",
-                        active
-                          ? "bg-white text-gray-900 shadow-[0_1px_2px_rgba(0,0,0,0.06)] border border-gray-200/60"
-                          : "text-gray-500 hover:text-gray-900 hover:bg-white/60",
-                      )}
-                    >
-                      <Icon className={cn("w-[17px] h-[17px] flex-shrink-0", active ? "text-gray-900" : "text-gray-400")} />
-                      {item.label}
-                    </Link>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/* User card pinned at the bottom */}
-        <div className="px-3 pb-4">
-          <div className="bg-white rounded-xl border border-gray-200/70 p-3 flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
-              {user?.initials}
-            </span>
-            <div className="leading-tight min-w-0 flex-1">
-              <p className="text-[12.5px] font-semibold text-gray-900 truncate">{user?.name}</p>
-              <p className="text-[10.5px] text-gray-400">{roleLabel}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => logout()}
-              title="Sign out"
-              className="text-gray-400 hover:text-red-500 p-1 flex-shrink-0 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <NotificationsBell />
+            <UserMenu />
           </div>
         </div>
-      </aside>
+      </header>
 
-      {/* Main area */}
-      <div className="flex-1 pl-[232px] min-w-0">
-        <div className="px-6 py-6">
-          <header className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-            <div className="min-w-0">
-              <h1 className="text-[22px] font-bold text-gray-900 truncate">{title}</h1>
-              {subtitle && <p className="text-[13px] text-gray-500 mt-0.5">{subtitle}</p>}
-            </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              {actions}
-              <NotificationsBell />
-            </div>
-          </header>
-
-          <main className="min-w-0">{children}</main>
+      {/* Page canvas — GHL gray with constrained content width */}
+      <div className={cn("px-4 sm:px-6 py-6", !fullWidth && "w-full mx-auto")}>
+        <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-[24px] font-bold text-gray-900 truncate">{title}</h1>
+            {subtitle && <p className="text-[13px] text-gray-500 mt-0.5">{subtitle}</p>}
+          </div>
+          {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
         </div>
+
+        <main className="min-w-0">{children}</main>
       </div>
     </div>
   )

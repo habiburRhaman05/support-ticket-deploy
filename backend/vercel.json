@@ -1,14 +1,12 @@
 {
-  "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install",
   "buildCommand": "pnpm build:vercel",
-  "outputDirectory": ".",
+  "outputDirectory": "public",
   "functions": {
-    "dist/vercel-app.mjs": {
+    "api/index.mjs": {
       "maxDuration": 30
     }
   },
-  "routes": [
-    { "src": "/(.*)", "dest": "dist/vercel-app.mjs" }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
 }

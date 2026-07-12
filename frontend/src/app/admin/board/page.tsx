@@ -67,6 +67,7 @@ function BoardPage() {
 
   return (
     <AppShell
+      fullWidth
       title={isOwner ? "Support board" : "My tickets"}
       subtitle={
         isOwner

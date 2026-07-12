@@ -10,6 +10,7 @@ function TeamBoardPage() {
 
   return (
     <AppShell
+      fullWidth
       title="My tickets"
       subtitle="Tickets assigned to you — move them through the pipeline up to Review."
     >
