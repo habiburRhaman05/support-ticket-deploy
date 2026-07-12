@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  AGENCY_OWNER
+  TEAM_MEMBER
+  SUB_ACCOUNT
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStage {
+  NEW
+  ACCEPTED
+  WORKING
+  PENDING
+  REVIEW
+  RESOLVED
+}
+
+enum SubAccountStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+model Agency {
+  id                 String    @id @default(cuid())
+  name               String
+  slug               String    @unique
+  ghlCompanyId       String?   @unique
+  // AES-256-GCM ciphertext (v1:iv:tag:data) — never store the raw key
+  ghlApiKeyEncrypted String?
+  connectedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  users         User[]
+  subAccounts   SubAccount[]
+  tickets       Ticket[]
+  emailTemplates EmailTemplate[]
+  auditLogs     AuditLog[]
+  stageConfigs  StageConfig[]
+}
+
+model SubAccount {
+  id               String           @id @default(cuid())
+  agencyId         String
+  ghlLocationId    String
+  name             String
+  contactEmail     String?
+  status           SubAccountStatus @default(PENDING)
+  rejectionComment String?
+  requestedAt      DateTime         @default(now())
+  decidedAt        DateTime?
+  decidedById      String?
+  // Portal login identity, created when the sub-account is approved
+  userId           String?          @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  agency    Agency @relation(fields: [agencyId], references: [id])
+  decidedBy User?  @relation("SubAccountDecisions", fields: [decidedById], references: [id])
+  user      User?  @relation("SubAccountIdentity", fields: [userId], references: [id])
+
+  @@unique([agencyId, ghlLocationId])
+  @@index([agencyId, status])
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String?
+  passwordHash   String?
+  name           String
+  initials       String
+  role           UserRole
+  locationId     String?
+  skills         String    @default("")
+  isAvailable    Boolean   @default(true)
+  isDeleted      Boolean   @default(false)
+  tempPassword   Boolean   @default(false)
+  contactEmail   String?
+  plan           String?
+  agencyId       String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  agency            Agency    @relation(fields: [agencyId], references: [id])
+  assignedTickets   Ticket[]  @relation("Assignee")
+  subAccountTickets Ticket[]  @relation("SubAccount")
+  historyActions    TicketStageHistory[]
+  attachments       Attachment[]
+  notifications     Notification[]
+  auditActions      AuditLog[]
+  subAccountProfile SubAccount? @relation("SubAccountIdentity")
+  subAccountDecisions SubAccount[] @relation("SubAccountDecisions")
+
+  @@unique([email, agencyId])
+  @@index([agencyId])
+  @@index([locationId])
+  @@index([role])
+}
+
+model Ticket {
+  id            String        @id @default(cuid())
+  displayId     Int           @default(0)
+  subject       String
+  description   String
+  priority      TicketPriority @default(MEDIUM)
+  category      String
+  stage         TicketStage   @default(NEW)
+  assigneeId    String?
+  subAccountId  String
+  agencyId      String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  assignee      User?     @relation("Assignee", fields: [assigneeId], references: [id])
+  subAccount    User      @relation("SubAccount", fields: [subAccountId], references: [id])
+  agency        Agency    @relation(fields: [agencyId], references: [id])
+  history       TicketStageHistory[]
+  attachments   Attachment[]
+  notifications Notification[]
+
+  @@index([agencyId])
+  @@index([assigneeId])
+  @@index([subAccountId])
+  @@index([stage])
+  @@index([priority])
+  @@index([category])
+}
+
+model TicketStageHistory {
+  id              String      @id @default(cuid())
+  ticketId        String
+  stage           TicketStage
+  actorId         String
+  comment         String
+  isInternalNote  Boolean     @default(false)
+  wasEmailed      Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+
+  ticket  Ticket @relation(fields: [ticketId], references: [id])
+  actor   User   @relation(fields: [actorId], references: [id])
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+model Attachment {
+  id            String   @id @default(cuid())
+  ticketId      String
+  historyId     String?
+  fileName      String
+  fileUrl       String
+  fileType      String
+  fileSize      Int
+  uploadedById  String
+  createdAt     DateTime @default(now())
+
+  ticket      Ticket @relation(fields: [ticketId], references: [id])
+  uploadedBy  User   @relation(fields: [uploadedById], references: [id])
+
+  @@index([ticketId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  ticketId  String?
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  ticket Ticket? @relation(fields: [ticketId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model EmailTemplate {
+  id        String      @id @default(cuid())
+  agencyId  String
+  stage     TicketStage
+  subject   String
+  body      String
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, stage])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  agencyId    String
+  actorId     String
+  action      String
+  entityType  String
+  entityId    String
+  details     String?
+  createdAt   DateTime @default(now())
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+  actor  User   @relation(fields: [actorId], references: [id])
+
+  @@index([agencyId, createdAt])
+  @@index([actorId])
+  @@index([entityType, entityId])
+}
+
+model StageConfig {
+  id        String      @id @default(cuid())
+  agencyId  String
+  stageKey  TicketStage
+  name      String
+  color     String
+  order     Int
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, stageKey])
+}

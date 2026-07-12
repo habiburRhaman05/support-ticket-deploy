@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dispatch — Support Desk Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EEEDE7;
+    --surface:#FBFAF7;
+    --surface-raised:#FFFFFF;
+    --ink:#1C1F26;
+    --ink-soft:#5B5F6B;
+    --ink-faint:#9498A3;
+    --line:#DCDACF;
+    --accent:#3B4BD8;
+    --accent-soft:#E7E9FB;
+    --danger:#D6455A;
+
+    --stage-new:#94A0B8;
+    --stage-accepted:#5C6BD8;
+    --stage-working:#E08A2C;
+    --stage-pending:#9B5DE0;
+    --stage-review:#1FA6B0;
+    --stage-resolved:#2E9B5C;
+
+    --radius:10px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-body:'Inter', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+    height:100vh;
+    overflow:hidden;
+  }
+  #app{display:flex;flex-direction:column;height:100vh;}
+  button{font-family:inherit;cursor:pointer;}
+  ::-webkit-scrollbar{height:8px;width:8px;}
+  ::-webkit-scrollbar-thumb{background:#CFCDC0;border-radius:8px;}
+
+  /* ---------- Topbar ---------- */
+  .topbar{
+    display:flex;align-items:center;gap:16px;
+    padding:12px 20px;
+    background:var(--surface-raised);
+    border-bottom:1px solid var(--line);
+    flex-shrink:0;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:18px;}
+  .brand .mark{
+    width:26px;height:26px;border-radius:7px;
+    background:linear-gradient(135deg,var(--accent),var(--stage-review));
+    position:relative;flex-shrink:0;
+  }
+  .brand .mark::after{
+    content:"";position:absolute;inset:7px;background:var(--surface-raised);border-radius:3px;
+  }
+  .topbar .spacer{flex:1;}
+  .role-switch{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);}
+  select{
+    font-family:inherit;font-size:13px;padding:7px 10px;border-radius:8px;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  }
+  .btn{
+    border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;
+    display:inline-flex;align-items:center;gap:6px;
+  }
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:hover{background:#000;}
+  .btn-ghost{background:transparent;color:var(--ink-soft);border:1px solid var(--line);}
+  .btn-ghost:hover{background:var(--surface);}
+  .btn-danger{background:var(--danger);color:#fff;}
+  .icon-btn{
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--surface);
+    display:flex;align-items:center;justify-content:center;color:var(--ink-soft);position:relative;
+  }
+  .icon-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+  .badge-dot{
+    position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;font-size:10px;
+    border-radius:10px;padding:0 5px;min-width:16px;height:16px;line-height:16px;text-align:center;font-family:var(--font-mono);
+  }
+
+  /* ---------- Layout ---------- */
+  .body-row{flex:1;display:flex;min-height:0;}
+  .sidenav{
+    width:190px;flex-shrink:0;background:var(--surface-raised);border-right:1px solid var(--line);
+    padding:16px 10px;display:flex;flex-direction:column;gap:2px;
+  }
+  .nav-item{
+    padding:9px 12px;border-radius:8px;font-size:13.5px;font-weight:500;color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:space-between;border:none;background:none;text-align:left;width:100%;
+  }
+  .nav-item:hover{background:var(--surface);}
+  .nav-item.active{background:var(--ink);color:#fff;}
+  .nav-count{font-family:var(--font-mono);font-size:11px;opacity:.7;}
+  .nav-divider{height:1px;background:var(--line);margin:10px 4px;}
+  .avail-toggle{margin:10px 6px 2px;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:12px;}
+  .avail-toggle label{display:flex;align-items:center;justify-content:space-between;color:var(--ink-soft);cursor:pointer;}
+  .switch{width:34px;height:19px;border-radius:20px;background:var(--line);position:relative;transition:.15s;flex-shrink:0;}
+  .switch::after{content:"";position:absolute;width:15px;height:15px;border-radius:50%;background:#fff;top:2px;left:2px;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2);}
+  .switch.on{background:var(--stage-resolved);}
+  .switch.on::after{left:17px;}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;}
+  .main-header{padding:16px 22px 10px;flex-shrink:0;}
+  .main-header h1{font-family:var(--font-display);font-size:20px;margin:0 0 2px;}
+  .main-header p{margin:0;font-size:13px;color:var(--ink-soft);}
+  .main-scroll{flex:1;overflow:auto;padding:6px 22px 22px;}
+
+  /* ---------- Kanban ---------- */
+  .rail{display:flex;gap:14px;height:100%;min-height:0;}
+  .column{
+    width:250px;flex-shrink:0;display:flex;flex-direction:column;background:transparent;height:100%;
+  }
+  .col-head{
+    padding:9px 4px 12px;border-top:3px solid var(--stage-color,#999);
+    display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;position:relative;
+  }
+  .col-head::before{
+    content:"";position:absolute;left:-7px;top:-3px;width:14px;height:3px;background:var(--line);
+  }
+  .col-head:first-child::before{display:none;}
+  .col-title{font-family:var(--font-display);font-weight:600;font-size:13.5px;}
+  .col-count{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);background:var(--surface-raised);border:1px solid var(--line);padding:1px 7px;border-radius:20px;}
+  .col-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 2px 10px;min-height:40px;}
+  .col-body.dragover{background:var(--accent-soft);border-radius:10px;}
+
+  .card{
+    background:var(--surface-raised);border:1px solid var(--line);border-radius:10px;padding:11px 12px;
+    cursor:grab;box-shadow:0 1px 2px rgba(20,20,10,.03);
+  }
+  .card:hover{border-color:#C7C4B4;}
+  .card.dragging{opacity:.4;}
+  .card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .card-id{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-faint);}
+  .pri-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .pri-urgent{background:var(--danger);}
+  .pri-high{background:var(--stage-working);}
+  .pri-normal{background:var(--ink-faint);}
+  .card-subject{font-size:13.5px;font-weight:600;margin:0 0 4px;line-height:1.3;}
+  .card-sub{font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;}
+  .card-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+  .tag{font-size:10.5px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--ink-soft);}
+  .card-foot{display:flex;align-items:center;justify-content:space-between;}
+  .avatar{
+    width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);
+    font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);
+    flex-shrink:0;
+  }
+  .avatar.unassigned{background:var(--surface);color:var(--ink-faint);border:1px dashed var(--line);}
+  .move-btn{
+    font-size:10.5px;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:3px 8px;color:var(--ink-soft);
+  }
+  .move-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .stage-menu{
+    position:absolute;background:var(--surface-raised);border:1px solid var(--line);border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50;min-width:160px;overflow:hidden;
+  }
+  .stage-menu button{
+    display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 12px;border:none;background:none;font-size:12.5px;
+  }
+  .stage-menu button:hover{background:var(--surface);}
+  .stage-menu .dot{width:8px;height:8px;border-radius:50%;}
+  .stage-menu button:disabled{opacity:.35;cursor:not-allowed;}
+
+  /* ---------- Tables / lists ---------- */
+  table{width:100%;border-collapse:collapse;background:var(--surface-raised);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  th,td{padding:10px 14px;text-align:left;font-size:13px;border-bottom:1px solid var(--line);}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);font-weight:600;background:var(--surface);}
+  tr:last-child td{border-bottom:none;}
+  .stage-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:20px;}
+  .status-dot{width:8px;height:8px;border-radius:50%;}
+  .status-avail{background:var(--stage-resolved);}
+  .status-away{background:var(--ink-faint);}
+  .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+  .stat-card{background:var(--surface-raised);border:1px solid var(--line);border-radius:10px;padding:16px;}
+  .stat-card .num{font-family:var(--font-display);font-size:26px;font-weight:700;}
+  .stat-card .label{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---------- Modal ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(20,20,15,.4);display:flex;align-items:center;justify-content:center;z-index:200;
+    padding:20px;
+  }
+  .modal{
+    background:var(--surface-raised);border-radius:14px;width:560px;max-width:100%;max-height:88vh;overflow-y:auto;
+    box-shadow:0 20px 60px rgba(0,0,0,.25);
+  }
+  .modal-head{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+  .modal-head h2{font-family:var(--font-display);font-size:17px;margin:0 0 3px;}
+  .modal-head .meta{font-size:12px;color:var(--ink-soft);font-family:var(--font-mono);}
+  .modal-body{padding:18px 22px;}
+  .modal-foot{padding:16px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
+  .close-x{background:none;border:none;font-size:18px;color:var(--ink-faint);padding:2px 6px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  input[type=text],textarea,input[type=email]{
+    width:100%;font-family:inherit;font-size:13px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);
+  }
+  textarea{resize:vertical;min-height:70px;}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .timeline{display:flex;flex-direction:column;gap:0;margin-top:6px;}
+  .tl-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .tl-item:last-child{border-bottom:none;}
+  .tl-dot{width:9px;height:9px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+  .tl-head{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;}
+  .tl-time{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-faint);font-weight:400;}
+  .tl-text{font-size:12.5px;color:var(--ink-soft);margin-top:3px;line-height:1.5;}
+  .tl-email{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--accent);margin-top:5px;}
+  .checkbox-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-top:8px;}
+  .subtle-note{font-size:11.5px;color:var(--ink-faint);margin-top:6px;line-height:1.5;}
+  .section-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);font-weight:600;margin:0 0 8px;}
+  .approve-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:14px;}
+
+  /* ---------- Activity drawer ---------- */
+  .drawer{
+    position:fixed;top:0;right:0;bottom:0;width:320px;background:var(--surface-raised);border-left:1px solid var(--line);
+    box-shadow:-8px 0 24px rgba(0,0,0,.06);z-index:150;display:flex;flex-direction:column;
+    transform:translateX(100%);transition:transform .2s ease;
+  }
+  .drawer.open{transform:translateX(0);}
+  .drawer-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+  .drawer-head h3{font-family:var(--font-display);font-size:15px;margin:0;}
+  .drawer-body{flex:1;overflow-y:auto;padding:6px 18px;}
+  .log-item{padding:11px 0;border-bottom:1px solid var(--line);font-size:12px;}
+  .log-item .lt{color:var(--ink-faint);font-family:var(--font-mono);font-size:10.5px;}
+  .log-item .lm{margin-top:3px;color:var(--ink-soft);line-height:1.4;}
+  .empty-note{padding:40px 10px;text-align:center;color:var(--ink-faint);font-size:12.5px;}
+  .reply-box{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px;background:var(--surface);}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* =========================================================
+   DATA MODEL (in-memory only — resets on reload, per prototype)
+   ========================================================= */
+const STAGES = [
+  {key:'new', name:'New / Open', color:'var(--stage-new)'},
+  {key:'accepted', name:'Accepted', color:'var(--stage-accepted)'},
+  {key:'working', name:'Working', color:'var(--stage-working)'},
+  {key:'pending', name:'Pending', color:'var(--stage-pending)'},
+  {key:'review', name:'Review', color:'var(--stage-review)'},
+  {key:'resolved', name:'Resolved / Closed', color:'var(--stage-resolved)'},
+];
+const STAGE_INDEX = k => STAGES.findIndex(s=>s.key===k);
+
+const DEFAULT_COMMENTS = {
+  new: "Your ticket has been received — we'll take a look shortly.",
+  accepted: "This has been acknowledged and queued for work.",
+  working: "We're actively working on your {category} issue.",
+  pending: "We're waiting on more information — reply below when you're ready.",
+  review: "The fix is complete and is with an admin for final sign-off.",
+  resolved: "This issue has been resolved. Thanks for your patience!",
+};
+
+let uid = 100;
+const nextId = () => 'TCK-' + (uid++);
+
+const users = {
+  admin1: {id:'admin1', role:'agency_admin', name:'Priya Nair', initials:'PN'},
+  team1: {id:'team1', role:'team_member', name:'Sam Ortiz', initials:'SO', skills:['billing','bug'], available:true},
+  team2: {id:'team2', role:'team_member', name:'Kai Chen', initials:'KC', skills:['auth','bug'], available:true},
+  team3: {id:'team3', role:'team_member', name:'Dana Wells', initials:'DW', skills:['onboarding'], available:false},
+  sub1: {id:'sub1', role:'sub_account', name:'Northwind Retail', initials:'NR', contact:'ops@northwind.example', plan:'Growth'},
+  sub2: {id:'sub2', role:'sub_account', name:'Blue Harbor Co.', initials:'BH', contact:'hello@blueharbor.example', plan:'Starter'},
+  sub3: {id:'sub3', role:'sub_account', name:'Fenwick Studio', initials:'FS', contact:'team@fenwick.example', plan:'Growth'},
+};
+const teamMembers = () => Object.values(users).filter(u=>u.role==='team_member');
+const subAccounts = () => Object.values(users).filter(u=>u.role==='sub_account');
+
+function mkTicket(subject, description, category, priority, subAccountId, stage, assigneeId, history){
+  return {
+    id: nextId(), subject, description, category, priority,
+    subAccountId, stage, assigneeId: assigneeId||null,
+    history: history || [],
+  };
+}
+function hist(stage, actor, comment, emailed){
+  return {stage, actor, comment, emailed: !!emailed, time: new Date(Date.now()-Math.random()*1000*60*60*40)};
+}
+
+let tickets = [
+  mkTicket('Checkout button unresponsive on mobile','Customers report the checkout CTA does nothing on iOS Safari.','bug','urgent','sub1','working','team1',[
+    hist('new','sub1','Ticket submitted.',false),
+    hist('accepted','admin1','This has been acknowledged and queued for work.',true),
+    hist('working','team1',"We're actively working on your bug issue.",true),
+  ]),
+  mkTicket('Can\'t reset password','Reset email never arrives, checked spam folder.','auth','high','sub2','review','team2',[
+    hist('new','sub2','Ticket submitted.',false),
+    hist('accepted','admin1','This has been acknowledged and queued for work.',true),
+    hist('working','team2',"We're actively working on your auth issue.",true),
+    hist('review','team2','Root cause was a bounced sender domain — reset emails now deliver. Ready for sign-off.',false),
+  ]),
+  mkTicket('Invoice shows wrong tax rate','November invoice applied the wrong regional tax rate.','billing','normal','sub3','pending','team1',[
+    hist('new','sub3','Ticket submitted.',false),
+    hist('accepted','admin1','This has been acknowledged and queued for work.',true),
+    hist('working','team1',"We're actively working on your billing issue.",true),
+    hist('pending','team1','Could you confirm your billing region so we can correct the rate?',true),
+  ]),
+  mkTicket('Onboarding checklist stuck at step 3','New team member can\'t progress past the workspace step.','onboarding','normal','sub1','new',null,[
+    hist('new','sub1','Ticket submitted.',false),
+  ]),
+  mkTicket('Feature request: dark mode','Would love a dark theme option for the dashboard.','feature','normal','sub2','new',null,[
+    hist('new','sub2','Ticket submitted.',false),
+  ]),
+  mkTicket('Export to CSV missing columns','The exported CSV is missing the "priority" column.','bug','high','sub3','accepted','team2',[
+    hist('new','sub3','Ticket submitted.',false),
+    hist('accepted','admin1','This has been acknowledged and queued for work.',true),
+  ]),
+  mkTicket('Duplicate charge on card','Charged twice for the same monthly plan.','billing','urgent','sub1','resolved','team1',[
+    hist('new','sub1','Ticket submitted.',false),
+    hist('accepted','admin1','This has been acknowledged and queued for work.',true),
+    hist('working','team1',"We're actively working on your billing issue.",true),
+    hist('review','team1','Duplicate charge refunded, confirmation sent to billing contact.',false),
+    hist('resolved','admin1','Approved — refund verified in the ledger.',true),
+  ]),
+];
+
+let activityLog = [
+  {time:new Date(Date.now()-1000*60*40), msg:'Email sent to Northwind Retail — TCK-100 moved to Working.'},
+  {time:new Date(Date.now()-1000*60*80), msg:'Email sent to Blue Harbor Co. — TCK-101 moved to Working.'},
+  {time:new Date(Date.now()-1000*60*160), msg:'Email sent to Fenwick Studio — TCK-102 moved to Pending.'},
+];
+function logActivity(msg){ activityLog.unshift({time:new Date(), msg}); }
+
+/* =========================================================
+   STATE
+   ========================================================= */
+let state = {
+  currentUserId: 'admin1',
+  view: 'board',          // board | team | subaccounts | unassigned | reports | mytickets
+  drawerOpen: false,
+  openTicketId: null,
+  stageMenuFor: null,      // ticket id currently showing the tap-to-select menu
+  draggingId: null,
+  newTicketOpen: false,
+};
+const currentUser = () => users[state.currentUserId];
+
+/* =========================================================
+   PERMISSIONS
+   ========================================================= */
+function canMoveTo(ticket, targetStageKey){
+  const role = currentUser().role;
+  const targetIdx = STAGE_INDEX(targetStageKey);
+  if(role === 'sub_account') return false;
+  if(role === 'agency_admin') return true;
+  if(role === 'team_member'){
+    if(targetStageKey === 'resolved') return false; // must go through Review + admin approval
+    if(ticket.assigneeId !== currentUser().id) return false;
+    return true;
+  }
+  return false;
+}
+function canOpenTicket(ticket){
+  const u = currentUser();
+  if(u.role === 'agency_admin') return true;
+  if(u.role === 'team_member') return ticket.assigneeId === u.id;
+  if(u.role === 'sub_account') return ticket.subAccountId === u.id;
+}
+function visibleTickets(){
+  const u = currentUser();
+  if(u.role === 'agency_admin') return tickets;
+  if(u.role === 'team_member') return tickets.filter(t=>t.assigneeId === u.id);
+  if(u.role === 'sub_account') return tickets.filter(t=>t.subAccountId === u.id);
+}
+
+/* =========================================================
+   ASSIGNMENT LOGIC
+   ========================================================= */
+function autoAssign(category){
+  const available = teamMembers().filter(m=>m.available);
+  if(available.length === 0) return null; // -> unassigned queue
+  const skillMatch = available.filter(m=>m.skills.includes(category));
+  const pool = skillMatch.length ? skillMatch : available;
+  // least-busy: fewest tickets currently assigned that aren't resolved
+  const load = m => tickets.filter(t=>t.assigneeId===m.id && t.stage!=='resolved').length;
+  pool.sort((a,b)=>load(a)-load(b));
+  return pool[0].id;
+}
+
+/* =========================================================
+   RENDER HELPERS
+   ========================================================= */
+function fmtTime(d){
+  return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function esc(s){ return (s+'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function priorityDotClass(p){ return p==='urgent'?'pri-urgent':p==='high'?'pri-high':'pri-normal'; }
+function stageColor(key){ return STAGES.find(s=>s.key===key).color; }
+function unassignedTickets(){ return tickets.filter(t=>!t.assigneeId && t.stage!=='resolved'); }
+
+/* =========================================================
+   MAIN RENDER
+   ========================================================= */
+function render(){
+  const u = currentUser();
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    ${renderTopbar()}
+    <div class="body-row">
+      ${renderSidenav()}
+      <div class="main">
+        ${renderMainContent()}
+      </div>
+    </div>
+    ${renderDrawer()}
+    ${state.openTicketId ? renderTicketModal() : ''}
+    ${state.newTicketOpen ? renderNewTicketModal() : ''}
+    ${state.stageMenuFor ? renderStageMenu() : ''}
+  `;
+  attachEvents();
+}
+
+function renderTopbar(){
+  const u = currentUser();
+  const roleLabel = {agency_admin:'Agency Admin', team_member:'Team Member', sub_account:'Sub-Account'}[u.role];
+  const options = [
+    ['admin1','Priya Nair — Admin'],
+    ['team1','Sam Ortiz — Team'],
+    ['team2','Kai Chen — Team'],
+    ['team3','Dana Wells — Team'],
+    ['sub1','Northwind Retail — Client'],
+    ['sub2','Blue Harbor Co. — Client'],
+    ['sub3','Fenwick Studio — Client'],
+  ];
+  return `
+  <div class="topbar">
+    <div class="brand"><span class="mark"></span> Dispatch</div>
+    <div class="spacer"></div>
+    <div class="role-switch">
+      Viewing as
+      <select id="userSelect">
+        ${options.map(([id,label])=>`<option value="${id}" ${id===state.currentUserId?'selected':''}>${label}</option>`).join('')}
+      </select>
+    </div>
+    ${u.role !== 'sub_account' ? `<button class="btn btn-primary" id="newTicketBtn">+ New ticket</button>` : `<button class="btn btn-primary" id="newTicketBtn">+ Submit a ticket</button>`}
+    <button class="icon-btn ${state.drawerOpen?'active':''}" id="drawerToggle" title="Activity & email log">
+      ⏰
+      ${activityLog.length ? `<span class="badge-dot">${activityLog.length}</span>` : ''}
+    </button>
+  </div>`;
+}
+
+function renderSidenav(){
+  const u = currentUser();
+  if(u.role === 'agency_admin'){
+    const items = [
+      ['board','Board', tickets.length],
+      ['unassigned','Unassigned queue', unassignedTickets().length],
+      ['team','Team roster', teamMembers().length],
+      ['subaccounts','Sub-Accounts', subAccounts().length],
+      ['reports','Reports', null],
+    ];
+    return `<div class="sidenav">
+      ${items.map(([key,label,count])=>`
+        <button class="nav-item ${state.view===key?'active':''}" data-nav="${key}">
+          ${label} ${count!==null?`<span class="nav-count">${count}</span>`:''}
+        </button>`).join('')}
+    </div>`;
+  }
+  if(u.role === 'team_member'){
+    return `<div class="sidenav">
+      <button class="nav-item active" data-nav="board">My tickets <span class="nav-count">${visibleTickets().length}</span></button>
+      <div class="nav-divider"></div>
+      <div class="avail-toggle">
+        <label>
+          Available for assignment
+          <span class="switch ${u.available?'on':''}" id="availToggle"></span>
+        </label>
+      </div>
+    </div>`;
+  }
+  // sub_account
+  return `<div class="sidenav">
+    <button class="nav-item active" data-nav="board">My tickets <span class="nav-count">${visibleTickets().length}</span></button>
+    <div class="nav-divider"></div>
+    <div style="padding:10px 12px;font-size:11.5px;color:var(--ink-soft);line-height:1.5;">
+      <strong style="font-family:var(--font-display);display:block;margin-bottom:2px;">${u.name}</strong>
+      ${u.contact}<br>Plan: ${u.plan}
+    </div>
+  </div>`;
+}
+
+function renderMainContent(){
+  const u = currentUser();
+  if(u.role === 'sub_account') return renderBoardHeader('My tickets','Track every ticket you\'ve submitted and its current stage.') + renderBoard(visibleTickets());
+  if(u.role === 'team_member') return renderBoardHeader('My tickets','Tickets assigned to you. Move them through the pipeline up to Review.') + renderBoard(visibleTickets());
+
+  // admin views
+  if(state.view === 'board') return renderBoardHeader('Support board','Every ticket across the agency, in one pipeline.') + renderBoard(tickets);
+  if(state.view === 'unassigned') return renderUnassignedView();
+  if(state.view === 'team') return renderTeamView();
+  if(state.view === 'subaccounts') return renderSubAccountsView();
+  if(state.view === 'reports') return renderReportsView();
+  return '';
+}
+
+function renderBoardHeader(title, sub){
+  return `<div class="main-header"><h1>${title}</h1><p>${sub}</p></div>`;
+}
+
+function renderBoard(list){
+  return `<div class="main-scroll"><div class="rail">
+    ${STAGES.map(stage=>{
+      const items = list.filter(t=>t.stage===stage.key);
+      return `
+      <div class="column">
+        <div class="col-head" style="--stage-color:${stage.color}">
+          <span class="col-title">${stage.name}</span>
+          <span class="col-count">${items.length}</span>
+        </div>
+        <div class="col-body" data-stage="${stage.key}">
+          ${items.length ? items.map(renderCard).join('') : `<div class="empty-note">No tickets here</div>`}
+        </div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+function renderCard(t){
+  const sub = users[t.subAccountId];
+  const assignee = t.assigneeId ? users[t.assigneeId] : null;
+  const canDrag = canMoveTo(t, t.stage) === true && currentUser().role !== 'sub_account';
+  return `
+  <div class="card" draggable="${canDrag}" data-ticket="${t.id}">
+    <div class="card-top">
+      <span class="card-id">${t.id}</span>
+      <span class="pri-dot ${priorityDotClass(t.priority)}" title="${t.priority} priority"></span>
+    </div>
+    <p class="card-subject">${esc(t.subject)}</p>
+    <div class="card-sub">${sub ? esc(sub.name) : ''}</div>
+    <div class="card-tags"><span class="tag">${esc(t.category)}</span></div>
+    <div class="card-foot">
+      <div class="avatar ${assignee?'':'unassigned'}" title="${assignee?assignee.name:'Unassigned'}">${assignee?assignee.initials:'—'}</div>
+      ${currentUser().role!=='sub_account' ? `<button class="move-btn" data-move="${t.id}">Move ▾</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderUnassignedView(){
+  const list = unassignedTickets();
+  return renderBoardHeader('Unassigned queue', 'No team member was available when these arrived — assign them by hand.') + `
+  <div class="main-scroll">
+    ${list.length===0 ? `<div class="empty-note">Nothing waiting — everything got assigned automatically.</div>` : `
+    <table>
+      <thead><tr><th>Ticket</th><th>Subject</th><th>Client</th><th>Priority</th><th>Assign to</th></tr></thead>
+      <tbody>
+        ${list.map(t=>`
+          <tr>
+            <td style="font-family:var(--font-mono);font-size:12px;">${t.id}</td>
+            <td>${esc(t.subject)}</td>
+            <td>${esc(users[t.subAccountId].name)}</td>
+            <td><span class="pri-dot ${priorityDotClass(t.priority)}" style="display:inline-block;margin-right:5px;"></span>${t.priority}</td>
+            <td>
+              <select data-manual-assign="${t.id}">
+                <option value="">Choose a team member…</option>
+                ${teamMembers().map(m=>`<option value="${m.id}">${m.name}${m.available?'':' (away)'}</option>`).join('')}
+              </select>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+}
+
+function renderTeamView(){
+  return renderBoardHeader('Team roster', 'Live availability and current workload.') + `
+  <div class="main-scroll">
+    <table>
+      <thead><tr><th>Team member</th><th>Status</th><th>Skills</th><th>Open tickets</th><th>In review</th></tr></thead>
+      <tbody>
+        ${teamMembers().map(m=>{
+          const open = tickets.filter(t=>t.assigneeId===m.id && t.stage!=='resolved').length;
+          const review = tickets.filter(t=>t.assigneeId===m.id && t.stage==='review').length;
+          return `<tr>
+            <td style="display:flex;align-items:center;gap:8px;"><span class="avatar">${m.initials}</span>${m.name}</td>
+            <td><span class="status-dot ${m.available?'status-avail':'status-away'}" style="display:inline-block;margin-right:6px;"></span>${m.available?'Available':'Away'}</td>
+            <td>${m.skills.map(s=>`<span class="tag">${s}</span>`).join(' ')}</td>
+            <td>${open}</td>
+            <td>${review}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderSubAccountsView(){
+  return renderBoardHeader('Sub-Accounts', 'Every client your agency supports.') + `
+  <div class="main-scroll">
+    <table>
+      <thead><tr><th>Client</th><th>Contact</th><th>Plan</th><th>Open tickets</th><th>Last activity</th></tr></thead>
+      <tbody>
+        ${subAccounts().map(s=>{
+          const open = tickets.filter(t=>t.subAccountId===s.id && t.stage!=='resolved').length;
+          const own = tickets.filter(t=>t.subAccountId===s.id);
+          const last = own.reduce((max,t)=>{
+            const h = t.history[t.history.length-1];
+            return (!max || h.time>max) ? h.time : max;
+          }, null);
+          return `<tr>
+            <td style="display:flex;align-items:center;gap:8px;"><span class="avatar">${s.initials}</span>${s.name}</td>
+            <td>${s.contact}</td>
+            <td>${s.plan}</td>
+            <td>${open}</td>
+            <td>${last ? fmtTime(last) : '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderReportsView(){
+  const total = tickets.length;
+  const resolved = tickets.filter(t=>t.stage==='resolved').length;
+  const avgTouches = (tickets.reduce((s,t)=>s+t.history.length,0)/total).toFixed(1);
+  return renderBoardHeader('Reports','A quick read on where things stand.') + `
+  <div class="main-scroll">
+    <div class="report-grid">
+      <div class="stat-card"><div class="num">${total}</div><div class="label">Total tickets</div></div>
+      <div class="stat-card"><div class="num">${resolved}</div><div class="label">Resolved</div></div>
+      <div class="stat-card"><div class="num">${unassignedTickets().length}</div><div class="label">Unassigned</div></div>
+      <div class="stat-card"><div class="num">${avgTouches}</div><div class="label">Avg. stage touches / ticket</div></div>
+    </div>
+    <p class="section-label">Tickets per stage</p>
+    <table>
+      <thead><tr><th>Stage</th><th>Count</th></tr></thead>
+      <tbody>
+        ${STAGES.map(s=>`<tr><td><span class="stage-pill" style="background:${s.color};color:#fff;">${s.name}</span></td><td>${tickets.filter(t=>t.stage===s.key).length}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderDrawer(){
+  return `<div class="drawer ${state.drawerOpen?'open':''}">
+    <div class="drawer-head"><h3>Activity & email log</h3><button class="close-x" id="drawerClose">✕</button></div>
+    <div class="drawer-body">
+      ${activityLog.length===0 ? `<div class="empty-note">Nothing logged yet.</div>` :
+        activityLog.map(l=>`<div class="log-item"><div class="lt">${fmtTime(l.time)}</div><div class="lm">${esc(l.msg)}</div></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderStageMenu(){
+  const t = tickets.find(x=>x.id===state.stageMenuFor);
+  if(!t) return '';
+  return `<div class="overlay" id="menuOverlay" style="background:transparent;align-items:flex-start;justify-content:flex-start;">
+    <div class="stage-menu" id="stageMenuBox">
+      ${STAGES.map(s=>{
+        const allowed = canMoveTo(t, s.key) && s.key !== t.stage;
+        return `<button data-set-stage="${s.key}" ${allowed?'':'disabled'}>
+          <span class="dot" style="background:${s.color}"></span> ${s.name}
+        </button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderTicketModal(){
+  const t = tickets.find(x=>x.id===state.openTicketId);
+  if(!t) return '';
+  const u = currentUser();
+  const sub = users[t.subAccountId];
+  const assignee = t.assigneeId ? users[t.assigneeId] : null;
+  const defaultComment = DEFAULT_COMMENTS[t.stage].replace('{category}', t.category);
+  const isAdminReview = u.role==='agency_admin' && t.stage==='review';
+  const canComment = u.role !== 'sub_account' || t.stage === 'pending';
+
+  return `<div class="overlay" id="ticketOverlay">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h2>${esc(t.subject)}</h2>
+          <div class="meta">${t.id} · ${esc(sub.name)} · <span class="tag">${t.category}</span> · <span style="text-transform:capitalize;">${t.priority} priority</span></div>
+        </div>
+        <button class="close-x" id="ticketClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="section-label">Description</p>
+        <p style="font-size:13px;line-height:1.6;margin:0 0 16px;">${esc(t.description)}</p>
+
+        <p class="section-label">Assigned to</p>
+        <p style="font-size:13px;margin:0 0 16px;display:flex;align-items:center;gap:8px;">
+          <span class="avatar ${assignee?'':'unassigned'}">${assignee?assignee.initials:'—'}</span>
+          ${assignee ? assignee.name : 'Unassigned — waiting in queue'}
+        </p>
+
+        <p class="section-label">Timeline</p>
+        <div class="timeline">
+          ${t.history.map(h=>`
+            <div class="tl-item">
+              <span class="tl-dot" style="background:${stageColor(h.stage)}"></span>
+              <div>
+                <div class="tl-head">${STAGES.find(s=>s.key===h.stage).name} <span class="tl-time">${fmtTime(h.time)} · ${users[h.actor]?users[h.actor].name:h.actor}</span></div>
+                <div class="tl-text">${esc(h.comment)}</div>
+                ${h.emailed ? `<div class="tl-email">✉ Emailed to ${esc(sub.name)}</div>` : ''}
+              </div>
+            </div>`).join('')}
+        </div>
+
+        ${canComment && u.role !== 'sub_account' ? `
+        <div class="approve-box">
+          <p class="section-label">Add a stage comment</p>
+          <textarea id="commentText">${esc(defaultComment)}</textarea>
+          <label class="checkbox-row"><input type="checkbox" id="sendEmailChk" checked> Email this update to ${esc(sub.name)}</label>
+          <p class="subtle-note">Leaving this as the default comment sends it automatically. Editing it opens as a custom note logged the same way.</p>
+          <div style="margin-top:10px;"><button class="btn btn-ghost" id="postCommentBtn">Post comment</button></div>
+        </div>` : ''}
+
+        ${u.role==='sub_account' && t.stage==='pending' ? `
+        <div class="reply-box">
+          <p class="section-label" style="margin-bottom:6px;">Reply to this ticket</p>
+          <textarea id="commentText" placeholder="Add the information the team asked for…"></textarea>
+          <div style="margin-top:10px;"><button class="btn btn-ghost" id="postCommentBtn">Send reply</button></div>
+        </div>` : ''}
+
+        ${isAdminReview ? `
+        <div class="approve-box">
+          <p class="section-label">Review & approve</p>
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">${assignee.name} marked this resolved. Approve to close it, or send it back with feedback.</p>
+          <textarea id="reviewNote" placeholder="Optional note (required if rejecting)"></textarea>
+          <div style="margin-top:10px;display:flex;gap:8px;">
+            <button class="btn btn-primary" id="approveBtn">Approve & close</button>
+            <button class="btn btn-danger" id="rejectBtn">Reject — back to Working</button>
+          </div>
+        </div>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderNewTicketModal(){
+  const u = currentUser();
+  const isSubAccount = u.role === 'sub_account';
+  return `<div class="overlay" id="newOverlay">
+    <div class="modal">
+      <div class="modal-head">
+        <div><h2>${isSubAccount?'Submit a ticket':'New ticket'}</h2></div>
+        <button class="close-x" id="newClose">✕</button>
+      </div>
+      <div class="modal-body">
+        ${!isSubAccount ? `
+        <div class="field">
+          <label>Client</label>
+          <select id="f_sub">${subAccounts().map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}</select>
+        </div>` : ''}
+        <div class="field"><label>Subject</label><input type="text" id="f_subject" placeholder="Short summary of the issue"></div>
+        <div class="field"><label>Description</label><textarea id="f_desc" placeholder="What's going on?"></textarea></div>
+        <div class="field-row">
+          <div class="field">
+            <label>Category</label>
+            <select id="f_category">
+              <option value="bug">Bug</option>
+              <option value="billing">Billing</option>
+              <option value="auth">Account & auth</option>
+              <option value="onboarding">Onboarding</option>
+              <option value="feature">Feature request</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Priority</label>
+            <select id="f_priority">
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+        </div>
+        <p class="subtle-note">${isSubAccount ? 'We\'ll route this to the right person automatically.' : 'This will be routed using skill match → least-busy available team member → round robin, or dropped into the unassigned queue if no one is available.'}</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" id="newCancel">Cancel</button>
+        <button class="btn btn-primary" id="newCreate">Create ticket</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* =========================================================
+   EVENTS
+   ========================================================= */
+function attachEvents(){
+  const app = document.getElementById('app');
+
+  const userSelect = document.getElementById('userSelect');
+  if(userSelect) userSelect.onchange = e=>{ state.currentUserId = e.target.value; state.view='board'; render(); };
+
+  const newBtn = document.getElementById('newTicketBtn');
+  if(newBtn) newBtn.onclick = ()=>{ state.newTicketOpen = true; render(); };
+
+  const drawerToggle = document.getElementById('drawerToggle');
+  if(drawerToggle) drawerToggle.onclick = ()=>{ state.drawerOpen = !state.drawerOpen; render(); };
+  const drawerClose = document.getElementById('drawerClose');
+  if(drawerClose) drawerClose.onclick = ()=>{ state.drawerOpen = false; render(); };
+
+  app.querySelectorAll('[data-nav]').forEach(el=>{
+    el.onclick = ()=>{ state.view = el.dataset.nav; render(); };
+  });
+
+  const availToggle = document.getElementById('availToggle');
+  if(availToggle) availToggle.onclick = ()=>{
+    const u = currentUser();
+    u.available = !u.available;
+    render();
+  };
+
+  // manual assignment from unassigned queue
+  app.querySelectorAll('[data-manual-assign]').forEach(sel=>{
+    sel.onchange = e=>{
+      const t = tickets.find(x=>x.id===sel.dataset.manualAssign);
+      if(e.target.value){
+        t.assigneeId = e.target.value;
+        t.stage = 'accepted';
+        t.history.push(hist('accepted', currentUser().id, 'Manually assigned by admin and acknowledged.', true));
+        logActivity(`${users[e.target.value].name} manually assigned to ${t.id}.`);
+        render();
+      }
+    };
+  });
+
+  // ticket cards -> open modal
+  app.querySelectorAll('[data-ticket]').forEach(card=>{
+    card.addEventListener('click', e=>{
+      if(e.target.closest('[data-move]')) return;
+      const t = tickets.find(x=>x.id===card.dataset.ticket);
+      if(canOpenTicket(t)){ state.openTicketId = t.id; render(); }
+    });
+    card.addEventListener('dragstart', e=>{
+      state.draggingId = card.dataset.ticket;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); });
+  });
+
+  // move (tap-to-select) button
+  app.querySelectorAll('[data-move]').forEach(btn=>{
+    btn.onclick = e=>{
+      e.stopPropagation();
+      state.stageMenuFor = btn.dataset.move;
+      render();
+      positionStageMenu(btn);
+    };
+  });
+
+  // stage menu overlay
+  const menuOverlay = document.getElementById('menuOverlay');
+  if(menuOverlay) menuOverlay.onclick = e=>{ if(e.target===menuOverlay){ state.stageMenuFor=null; render(); } };
+  app.querySelectorAll('[data-set-stage]').forEach(btn=>{
+    btn.onclick = ()=>{
+      if(btn.disabled) return;
+      moveTicket(state.stageMenuFor, btn.dataset.setStage);
+      state.stageMenuFor = null;
+      render();
+    };
+  });
+
+  // drag/drop columns
+  app.querySelectorAll('.col-body').forEach(col=>{
+    col.addEventListener('dragover', e=>{ e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', ()=>col.classList.remove('dragover'));
+    col.addEventListener('drop', e=>{
+      e.preventDefault();
+      col.classList.remove('dragover');
+      if(state.draggingId){
+        moveTicket(state.draggingId, col.dataset.stage);
+        state.draggingId = null;
+        render();
+      }
+    });
+  });
+
+  // ticket modal
+  const ticketClose = document.getElementById('ticketClose');
+  if(ticketClose) ticketClose.onclick = ()=>{ state.openTicketId=null; render(); };
+  const ticketOverlay = document.getElementById('ticketOverlay');
+  if(ticketOverlay) ticketOverlay.onclick = e=>{ if(e.target===ticketOverlay){ state.openTicketId=null; render(); } };
+
+  const postBtn = document.getElementById('postCommentBtn');
+  if(postBtn) postBtn.onclick = ()=>{
+    const t = tickets.find(x=>x.id===state.openTicketId);
+    const text = document.getElementById('commentText').value.trim();
+    const emailChk = document.getElementById('sendEmailChk');
+    const willEmail = emailChk ? emailChk.checked : true;
+    if(!text) return;
+    t.history.push(hist(t.stage, currentUser().id, text, willEmail));
+    if(willEmail){ logActivity(`Email sent to ${users[t.subAccountId].name} — update on ${t.id}.`); }
+    render();
+    state.openTicketId = t.id;
+    render();
+  };
+
+  const approveBtn = document.getElementById('approveBtn');
+  if(approveBtn) approveBtn.onclick = ()=>{
+    const t = tickets.find(x=>x.id===state.openTicketId);
+    const note = document.getElementById('reviewNote').value.trim();
+    t.stage = 'resolved';
+    t.history.push(hist('resolved', currentUser().id, note || 'Approved — closing this ticket. A short rating request has been sent.', true));
+    logActivity(`${t.id} approved and resolved. Rating request + closure email sent to ${users[t.subAccountId].name}.`);
+    state.openTicketId = null;
+    render();
+  };
+  const rejectBtn = document.getElementById('rejectBtn');
+  if(rejectBtn) rejectBtn.onclick = ()=>{
+    const t = tickets.find(x=>x.id===state.openTicketId);
+    const note = document.getElementById('reviewNote').value.trim();
+    if(!note){ alert('Add a note explaining what needs another pass before rejecting.'); return; }
+    t.stage = 'working';
+    t.history.push(hist('working', currentUser().id, 'Sent back for more work: ' + note, false));
+    logActivity(`${t.id} rejected in review — back to ${users[t.assigneeId].name}.`);
+    state.openTicketId = null;
+    render();
+  };
+
+  // new ticket modal
+  const newClose = document.getElementById('newClose');
+  if(newClose) newClose.onclick = ()=>{ state.newTicketOpen=false; render(); };
+  const newCancel = document.getElementById('newCancel');
+  if(newCancel) newCancel.onclick = ()=>{ state.newTicketOpen=false; render(); };
+  const newOverlay = document.getElementById('newOverlay');
+  if(newOverlay) newOverlay.onclick = e=>{ if(e.target===newOverlay){ state.newTicketOpen=false; render(); } };
+  const newCreate = document.getElementById('newCreate');
+  if(newCreate) newCreate.onclick = ()=>{
+    const u = currentUser();
+    const subject = document.getElementById('f_subject').value.trim();
+    const desc = document.getElementById('f_desc').value.trim();
+    const category = document.getElementById('f_category').value;
+    const priority = document.getElementById('f_priority').value;
+    const subAccountId = u.role==='sub_account' ? u.id : document.getElementById('f_sub').value;
+    if(!subject){ alert('Give the ticket a subject.'); return; }
+
+    const assigneeId = autoAssign(category);
+    const startStage = assigneeId ? 'accepted' : 'new';
+    const t = mkTicket(subject, desc || '(no description provided)', category, priority, subAccountId, startStage, assigneeId, [
+      hist('new', u.id, 'Ticket submitted.', false),
+    ]);
+    if(assigneeId){
+      t.history.push(hist('accepted', 'admin1', 'This has been acknowledged and queued for work.', true));
+      logActivity(`${t.id} auto-assigned to ${users[assigneeId].name}. Email sent to ${users[subAccountId].name}.`);
+    } else {
+      logActivity(`${t.id} has no available team member — dropped into the unassigned queue, admin notified.`);
+    }
+    tickets.unshift(t);
+    state.newTicketOpen = false;
+    render();
+  };
+}
+
+function positionStageMenu(anchorBtn){
+  const box = document.getElementById('stageMenuBox');
+  if(!box) return;
+  const r = anchorBtn.getBoundingClientRect();
+  box.style.top = (r.bottom + 6) + 'px';
+  let left = r.left - 40;
+  left = Math.min(left, window.innerWidth - 180);
+  box.style.left = Math.max(8,left) + 'px';
+}
+
+function moveTicket(ticketId, targetStage){
+  const t = tickets.find(x=>x.id===ticketId);
+  if(!t) return;
+  if(!canMoveTo(t, targetStage)) return;
+  t.stage = targetStage;
+  const comment = DEFAULT_COMMENTS[targetStage].replace('{category}', t.category);
+  t.history.push(hist(targetStage, currentUser().id, comment, true));
+  logActivity(`Email sent to ${users[t.subAccountId].name} — ${t.id} moved to ${STAGES.find(s=>s.key===targetStage).name}.`);
+}
+
+render();
+</script>
+</body>
+</html>

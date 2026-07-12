@@ -1,0 +1,19 @@
+ValidationError: The Express 'trust proxy' setting is true, which allows anyone to trivially bypass IP-based rate limiting. See https://express-rate-limit.github.io/ERR_ERL_PERMISSIVE_TRUST_PROXY/ for more information.
+    at Object.trustProxy (C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\node_modules\.pnpm\express-rate-limit@8.3.1_express@5.2.1\node_modules\express-rate-limit\dist\index.cjs:353:13)
+    at wrappedValidations.<computed> [as trustProxy] (C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\node_modules\.pnpm\express-rate-limit@8.3.1_express@5.2.1\node_modules\express-rate-limit\dist\index.cjs:685:22)
+    at Object.keyGenerator (C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\node_modules\.pnpm\express-rate-limit@8.3.1_express@5.2.1\node_modules\express-rate-limit\dist\index.cjs:787:20)
+    at C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\node_modules\.pnpm\express-rate-limit@8.3.1_express@5.2.1\node_modules\express-rate-limit\dist\index.cjs:849:32
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\node_modules\.pnpm\express-rate-limit@8.3.1_express@5.2.1\node_modules\express-rate-limit\dist\index.cjs:830:5 {
+  code: 'ERR_ERL_PERMISSIVE_TRUST_PROXY',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_PERMISSIVE_TRUST_PROXY/'
+}
+Unhandled error: TypeError: Cannot read properties of undefined (reading 'map')
+    at <anonymous> (C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\src\utils\httpHandlers.ts:19:38)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Unhandled error: TypeError: Cannot read properties of undefined (reading 'map')
+    at <anonymous> (C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\src\utils\httpHandlers.ts:19:38)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Unhandled error: TypeError: Cannot read properties of undefined (reading 'map')
+    at <anonymous> (C:\Users\success\Desktop\ghl-agency-dashboard-main\ghl-agency-dashboard-main\backend\src\utils\httpHandlers.ts:19:38)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
