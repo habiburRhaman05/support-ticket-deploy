@@ -28,3 +28,6 @@ dist-ssr
 
 # Locally-stored attachments (Cloudinary is the production target)
 /uploads
+
+# Vercel
+.vercel

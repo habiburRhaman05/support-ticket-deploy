@@ -9,6 +9,7 @@
 	"private": true,
 	"scripts": {
 		"build": "tsc && tsup",
+		"build:vercel": "prisma generate && tsup src/vercel-app.ts --out-dir dist --format esm --sourcemap false --clean false --no-dts",
 		"start:dev": "node --import=tsx --watch src/index.ts",
 		"start:prod": "node dist/index.js",
 		"seed": "node --import=tsx prisma/seed.ts",

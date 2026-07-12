@@ -109,10 +109,7 @@ interface GetLocationResponse {
 }
 
 export const ghlClient = {
-  /**
-   * GET /locations/search?companyId=&limit=&skip=
-   * VERIFIED endpoint exists ("Search Sub-Account"); response shape ASSUMED.
-   */
+
   async searchLocations(apiKey: string, companyId: string, limit = 100, skip = 0): Promise<GhlLocation[]> {
     const data = await ghlGet<SearchLocationsResponse>({
       apiKey,
@@ -122,11 +119,7 @@ export const ghlClient = {
     return data.locations ?? [];
   },
 
-  /**
-   * Validates a Private Integration Token + Company ID pair by probing
-   * GET /locations/search with limit=1. A 200 proves the token is live and
-   * scoped to this company; 401/403 means invalid token or missing scope.
-   */
+
   async validateApiKey(apiKey: string, companyId: string): Promise<{ valid: boolean; reason?: string }> {
     try {
       await this.searchLocations(apiKey, companyId, 1, 0);
@@ -148,11 +141,7 @@ export const ghlClient = {
     }
   },
 
-  /**
-   * GET /locations/{locationId}
-   * VERIFIED endpoint exists; response shape ASSUMED ({ location: {...} }).
-   * Returns null when GHL says the location does not exist under this token.
-   */
+
   async getLocation(apiKey: string, locationId: string): Promise<GhlLocation | null> {
     try {
       const data = await ghlGet<GetLocationResponse>({
@@ -174,10 +163,7 @@ export const ghlClient = {
     }
   },
 
-  /**
-   * Paginates GET /locations/search until exhausted, throttled between pages.
-   * Used by the one-time bulk-approve onboarding action.
-   */
+
   async listAllLocations(apiKey: string, companyId: string): Promise<GhlLocation[]> {
     const all: GhlLocation[] = [];
     const pageSize = 100;
