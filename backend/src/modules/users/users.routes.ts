@@ -7,6 +7,7 @@ import { authorize } from "../../middlewares/authorize";
 
 const router = Router();
 
+
 router.use(authenticate);
 
 router.get("/team", authorize("AGENCY_OWNER"), usersController.listTeamMembers);

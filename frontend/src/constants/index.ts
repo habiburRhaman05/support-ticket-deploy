@@ -51,6 +51,8 @@ export const API_ENDPOINTS = {
   SUB_ACCOUNTS: {
     LIST: "/sub-accounts",
     REQUESTS: "/sub-accounts/requests",
+    OVERVIEW: "/sub-accounts/overview",
+    CONNECT: "/sub-accounts/connect",
     APPROVE: (id: string) => `/sub-accounts/${id}/approve`,
     REJECT: (id: string) => `/sub-accounts/${id}/reject`,
     BULK_APPROVE: "/sub-accounts/bulk-approve",
@@ -96,6 +98,7 @@ export const QUERY_KEYS = {
   },
   SUB_ACCOUNT_REQUESTS: ["sub-accounts", "requests"] as const,
   SUB_ACCOUNTS_ALL: ["sub-accounts", "all"] as const,
+  SUB_ACCOUNTS_OVERVIEW: ["sub-accounts", "overview"] as const,
   TICKETS: ["tickets"] as const,
   TICKET: (id: string) => ["ticket", id] as const,
   MY_TICKETS: ["tickets", "mine"] as const,

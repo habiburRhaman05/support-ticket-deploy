@@ -24,9 +24,32 @@ export class AuthService {
     }
 
     // Validate against GHL first — nothing persists if the key is bad.
+    // The token alone proves which agency it belongs to (each returned location
+    // carries the real companyId), so we also catch a wrong/mistyped Company ID
+    // here — e.g. the X-XXX-XXX "Relationship Number", which is NOT the API
+    // Company ID and would otherwise poison every later GHL call.
     const validation = await ghlClient.validateApiKey(dto.ghlApiKey, dto.ghlCompanyId);
     if (!validation.valid) {
       throw unauthorized(validation.reason ?? "GHL rejected the API key.", "GHL_KEY_INVALID");
+    }
+    let companyId = dto.ghlCompanyId;
+    const discovered = await ghlClient.discoverCompanyId(dto.ghlApiKey).catch(() => null);
+    if (discovered && discovered !== dto.ghlCompanyId) {
+      if (/^\d-\d{3}-\d{3}$/.test(dto.ghlCompanyId.trim())) {
+        // Unambiguous relationship-number format — correct it silently.
+        companyId = discovered;
+      } else {
+        throw badRequest(
+          `The Company ID you entered does not match this API key's agency. GHL reports your Company ID as "${discovered}" — please use that value (note: the X-XXX-XXX Relationship Number is not the Company ID).`,
+          "COMPANY_ID_MISMATCH",
+        );
+      }
+    }
+    if (companyId !== dto.ghlCompanyId) {
+      const clash = await prisma.agency.findUnique({ where: { ghlCompanyId: companyId } });
+      if (clash) {
+        throw conflict("This GHL account is already connected. Please log in with your email and password.", "ALREADY_CONNECTED");
+      }
     }
 
     const passwordHash = await hashPassword(dto.password);
@@ -37,7 +60,7 @@ export class AuthService {
         data: {
           name: dto.agencyName,
           slug: `${slugBase}-${Date.now()}`,
-          ghlCompanyId: dto.ghlCompanyId,
+          ghlCompanyId: companyId,
           ghlApiKeyEncrypted: encryptSecret(dto.ghlApiKey),
           connectedAt: new Date(),
           users: {
@@ -47,7 +70,7 @@ export class AuthService {
               name: dto.agencyName,
               initials: dto.agencyName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2),
               role: "AGENCY_OWNER",
-              locationId: dto.ghlCompanyId,
+              locationId: companyId,
             },
           },
         },
@@ -62,7 +85,7 @@ export class AuthService {
       action: "AGENCY_CONNECTED",
       entityType: "Agency",
       entityId: agency.id,
-      details: `Agency connected to GHL company ${dto.ghlCompanyId}`,
+      details: `Agency connected to GHL company ${companyId}`,
     });
 
     const jwtPayload: JwtPayload = { userId: user.id, role: user.role, agencyId: agency.id };

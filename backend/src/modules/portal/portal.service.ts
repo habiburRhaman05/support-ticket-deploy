@@ -19,11 +19,15 @@ type PortalResult =
   | { status: "UNKNOWN_LOCATION" };
 
 export class PortalService {
-  /** Single-agency deployment: resolve the one connected agency. */
+  /**
+   * Single-agency deployment: resolve the one connected agency. Newest connect
+   * wins — stale/demo rows from earlier environments must never capture the
+   * portal (a seeded row with an undecryptable key once broke every entry).
+   */
   private async connectedAgency() {
     const agency = await prisma.agency.findFirst({
       where: { ghlCompanyId: { not: null }, ghlApiKeyEncrypted: { not: null } },
-      orderBy: { connectedAt: "asc" },
+      orderBy: { connectedAt: "desc" },
     });
     if (!agency) {
       throw new AppError(
@@ -50,7 +54,18 @@ export class PortalService {
 
     // Unknown location — verify it actually exists under this agency in GHL
     // before creating anything. Garbage/guessed IDs create no rows.
-    const apiKey = decryptSecret(agency.ghlApiKeyEncrypted!);
+    let apiKey: string;
+    try {
+      apiKey = decryptSecret(agency.ghlApiKeyEncrypted!);
+    } catch {
+      // Stored ciphertext doesn't match the current ENCRYPTION_KEY — an ops
+      // problem, not the visitor's. Surface it clearly instead of a raw 500.
+      throw new AppError(
+        "The agency's stored GHL key cannot be read (encryption key changed?). The agency owner must reconnect.",
+        StatusCodes.SERVICE_UNAVAILABLE,
+        "AGENCY_KEY_UNREADABLE",
+      );
+    }
     const location = await ghlClient.getLocation(apiKey, locationId);
     if (!location) return { status: "UNKNOWN_LOCATION" };
 

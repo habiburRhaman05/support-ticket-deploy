@@ -23,7 +23,7 @@ export class UsersController {
 
   async updateTeamMember(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await usersService.updateTeamMember(req.user!.agencyId, req.params.id, req.body);
+      const result = await usersService.updateTeamMember(req.user!.agencyId, String(req.params.id), req.body);
       res.json({ success: true, data: result });
     } catch (error) {
       next(error);
@@ -32,7 +32,7 @@ export class UsersController {
 
   async deleteTeamMember(req: Request, res: Response, next: NextFunction) {
     try {
-      await usersService.deleteTeamMember(req.user!.agencyId, req.user!.userId, req.params.id);
+      await usersService.deleteTeamMember(req.user!.agencyId, req.user!.userId, String(req.params.id));
       res.json({ success: true, data: { message: "Team member removed" } });
     } catch (error) {
       next(error);

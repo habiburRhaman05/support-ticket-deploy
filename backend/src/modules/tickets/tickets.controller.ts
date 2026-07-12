@@ -46,7 +46,7 @@ export class TicketsController {
 
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const ticket = await ticketsService.getById(req.params.id, req.user!);
+      const ticket = await ticketsService.getById(String(req.params.id), req.user!);
       res.json({ success: true, data: ticket });
     } catch (error) {
       next(error);
@@ -56,7 +56,7 @@ export class TicketsController {
   async moveStage(req: Request, res: Response, next: NextFunction) {
     try {
       const { stage, comment, sendEmail } = req.body;
-      const ticket = await ticketsService.moveStage(req.params.id, stage, req.user!, comment, sendEmail);
+      const ticket = await ticketsService.moveStage(String(req.params.id), stage, req.user!, comment, sendEmail);
       res.json({ success: true, data: ticket });
     } catch (error) {
       next(error);
@@ -65,7 +65,7 @@ export class TicketsController {
 
   async assign(req: Request, res: Response, next: NextFunction) {
     try {
-      const ticket = await ticketsService.assign(req.params.id, req.body.assigneeId, req.user!);
+      const ticket = await ticketsService.assign(String(req.params.id), req.body.assigneeId, req.user!);
       res.json({ success: true, data: ticket });
     } catch (error) {
       next(error);
@@ -75,7 +75,7 @@ export class TicketsController {
   async addComment(req: Request, res: Response, next: NextFunction) {
     try {
       const { comment, isInternalNote, sendEmail } = req.body;
-      const history = await ticketsService.addComment(req.params.id, req.user!, comment, isInternalNote, sendEmail);
+      const history = await ticketsService.addComment(String(req.params.id), req.user!, comment, isInternalNote, sendEmail);
       res.status(StatusCodes.CREATED).json({ success: true, data: history });
     } catch (error) {
       next(error);
@@ -86,7 +86,7 @@ export class TicketsController {
     try {
       const files = (req.files as Express.Multer.File[] | undefined) ?? [];
       const historyId = typeof req.body?.historyId === "string" && req.body.historyId ? req.body.historyId : undefined;
-      const created = await ticketsService.addAttachments(req.params.id, req.user!, files, historyId);
+      const created = await ticketsService.addAttachments(String(req.params.id), req.user!, files, historyId);
       res.status(StatusCodes.CREATED).json({ success: true, data: created });
     } catch (error) {
       next(error);
@@ -95,7 +95,7 @@ export class TicketsController {
 
   async approve(req: Request, res: Response, next: NextFunction) {
     try {
-      const ticket = await ticketsService.approve(req.params.id, req.user!, req.body.note);
+      const ticket = await ticketsService.approve(String(req.params.id), req.user!, req.body.note);
       res.json({ success: true, data: ticket });
     } catch (error) {
       next(error);
@@ -104,7 +104,7 @@ export class TicketsController {
 
   async reject(req: Request, res: Response, next: NextFunction) {
     try {
-      const ticket = await ticketsService.reject(req.params.id, req.user!, req.body.note);
+      const ticket = await ticketsService.reject(String(req.params.id), req.user!, req.body.note);
       res.json({ success: true, data: ticket });
     } catch (error) {
       next(error);
@@ -113,7 +113,7 @@ export class TicketsController {
 
   async getHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const history = await ticketsService.getHistory(req.params.id, req.user!);
+      const history = await ticketsService.getHistory(String(req.params.id), req.user!);
       res.json({ success: true, data: history });
     } catch (error) {
       next(error);

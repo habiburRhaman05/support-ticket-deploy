@@ -19,6 +19,29 @@ export interface BulkApproveResult {
   skipped: number
 }
 
+/** One GHL location merged with its connection status in our DB. */
+export interface SubAccountOverviewRow {
+  locationId: string
+  name: string
+  contactEmail: string | null
+  status: "ACTIVE" | "PENDING" | "REJECTED" | "NOT_CONNECTED"
+  subAccountId: string | null
+  requestedAt: string | null
+  decidedAt: string | null
+  decidedBy: string | null
+  rejectionComment: string | null
+  openTickets: number
+  /** false = row exists in our DB but the location is gone from GHL */
+  inGhl: boolean
+}
+
+export interface SubAccountOverview {
+  locations: SubAccountOverviewRow[]
+  totals: { inGhl: number; connected: number; pending: number; notConnected: number; rejected: number }
+  syncedAt: string
+  fromCache: boolean
+}
+
 export const SubAccountsService = {
   async listRequests(): Promise<SubAccountRequest[]> {
     const response = await axiosInstance.get<{ success: boolean; data: SubAccountRequest[] }>(
@@ -52,6 +75,22 @@ export const SubAccountsService = {
   async bulkApprove(): Promise<BulkApproveResult> {
     const response = await axiosInstance.post<{ success: boolean; data: BulkApproveResult }>(
       API_ENDPOINTS.SUB_ACCOUNTS.BULK_APPROVE,
+    )
+    return response.data.data
+  },
+
+  async overview(refresh = false): Promise<SubAccountOverview> {
+    const response = await axiosInstance.get<{ success: boolean; data: SubAccountOverview }>(
+      API_ENDPOINTS.SUB_ACCOUNTS.OVERVIEW,
+      { params: refresh ? { refresh: "true" } : undefined },
+    )
+    return response.data.data
+  },
+
+  async connectLocation(locationId: string): Promise<SubAccountRequest> {
+    const response = await axiosInstance.post<{ success: boolean; data: SubAccountRequest }>(
+      API_ENDPOINTS.SUB_ACCOUNTS.CONNECT,
+      { locationId },
     )
     return response.data.data
   },

@@ -1,10 +1,156 @@
-import { ghlClient } from "../../lib/ghl/ghl.client";
+import { type GhlLocation, ghlClient } from "../../lib/ghl/ghl.client";
 import { badRequest, notFound } from "../../utils/appError";
 import { logAudit } from "../../utils/audit";
 import { decryptSecret } from "../../utils/crypto";
 import { prisma } from "../../utils/prisma";
 
+// Short-lived per-agency cache of the GHL location list, so the overview page
+// doesn't hammer GHL's API on every visit. "Refresh" bypasses it explicitly.
+const GHL_LOCATIONS_CACHE_TTL_MS = 5 * 60 * 1000;
+const ghlLocationsCache = new Map<string, { locations: GhlLocation[]; fetchedAt: number }>();
+
 export class SubAccountsService {
+  private async connectedAgencyOrThrow(agencyId: string) {
+    const agency = await prisma.agency.findUniqueOrThrow({ where: { id: agencyId } });
+    if (!agency.ghlCompanyId || !agency.ghlApiKeyEncrypted) {
+      throw badRequest("Agency is not connected to GHL", "NOT_CONNECTED");
+    }
+    return agency;
+  }
+
+  private async fetchGhlLocations(agencyId: string, forceRefresh: boolean) {
+    const cached = ghlLocationsCache.get(agencyId);
+    if (!forceRefresh && cached && Date.now() - cached.fetchedAt < GHL_LOCATIONS_CACHE_TTL_MS) {
+      return { locations: cached.locations, fetchedAt: cached.fetchedAt, fromCache: true };
+    }
+    const agency = await this.connectedAgencyOrThrow(agencyId);
+    const apiKey = decryptSecret(agency.ghlApiKeyEncrypted!);
+    const locations = await ghlClient.listAllLocations(apiKey, agency.ghlCompanyId!);
+    const fetchedAt = Date.now();
+    ghlLocationsCache.set(agencyId, { locations, fetchedAt });
+    return { locations, fetchedAt, fromCache: false };
+  }
+
+  /**
+   * Owner overview: EVERY location under the agency in GHL, each merged with
+   * our DB so the owner sees who is already connected, who is waiting, who was
+   * rejected, and who has simply never opened the portal (NOT_CONNECTED).
+   * GHL is the source of truth for the list; our DB for the status.
+   */
+  async overview(agencyId: string, forceRefresh = false) {
+    const { locations, fetchedAt, fromCache } = await this.fetchGhlLocations(agencyId, forceRefresh);
+
+    const dbRows = await prisma.subAccount.findMany({
+      where: { agencyId },
+      include: {
+        decidedBy: { select: { name: true } },
+        user: { select: { id: true, _count: { select: { subAccountTickets: { where: { stage: { not: "RESOLVED" } } } } } } },
+      },
+    });
+    const byLocationId = new Map(dbRows.map((row) => [row.ghlLocationId, row]));
+
+    const merged = locations
+      .filter((loc) => loc.id)
+      .map((loc) => {
+        const row = byLocationId.get(loc.id);
+        byLocationId.delete(loc.id);
+        return {
+          locationId: loc.id,
+          name: row?.name || loc.name || loc.id,
+          contactEmail: row?.contactEmail ?? loc.email ?? null,
+          status: row ? row.status : ("NOT_CONNECTED" as const),
+          subAccountId: row?.id ?? null,
+          requestedAt: row?.requestedAt ?? null,
+          decidedAt: row?.decidedAt ?? null,
+          decidedBy: row?.decidedBy?.name ?? null,
+          rejectionComment: row?.rejectionComment ?? null,
+          openTickets: row?.user?._count.subAccountTickets ?? 0,
+          inGhl: true,
+        };
+      });
+
+    // DB rows whose location no longer exists in GHL (deleted/moved client) —
+    // still shown so their ticket history isn't silently orphaned.
+    for (const row of byLocationId.values()) {
+      merged.push({
+        locationId: row.ghlLocationId,
+        name: row.name,
+        contactEmail: row.contactEmail,
+        status: row.status,
+        subAccountId: row.id,
+        requestedAt: row.requestedAt,
+        decidedAt: row.decidedAt,
+        decidedBy: row.decidedBy?.name ?? null,
+        rejectionComment: row.rejectionComment,
+        openTickets: row.user?._count.subAccountTickets ?? 0,
+        inGhl: false,
+      });
+    }
+
+    // Connected first, then pending, then the rest — stable and scannable.
+    const rank: Record<string, number> = { PENDING: 0, ACTIVE: 1, NOT_CONNECTED: 2, REJECTED: 3 };
+    merged.sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || a.name.localeCompare(b.name));
+
+    return {
+      locations: merged,
+      totals: {
+        inGhl: locations.length,
+        connected: merged.filter((l) => l.status === "ACTIVE").length,
+        pending: merged.filter((l) => l.status === "PENDING").length,
+        notConnected: merged.filter((l) => l.status === "NOT_CONNECTED").length,
+        rejected: merged.filter((l) => l.status === "REJECTED").length,
+      },
+      syncedAt: new Date(fetchedAt).toISOString(),
+      fromCache,
+    };
+  }
+
+  /**
+   * Owner pre-approves a single GHL location before it ever knocks on the
+   * portal: verified against GHL, then activated directly (same effect as
+   * approve, without waiting for the client's first click). Re-connecting a
+   * rejected row is allowed — the owner clicking Connect IS the decision.
+   */
+  async connectLocation(agencyId: string, actorId: string, locationId: string) {
+    const agency = await this.connectedAgencyOrThrow(agencyId);
+    const apiKey = decryptSecret(agency.ghlApiKeyEncrypted!);
+
+    const location = await ghlClient.getLocation(apiKey, locationId);
+    if (!location) throw notFound("This location does not exist under your GHL agency", "UNKNOWN_LOCATION");
+
+    const existing = await prisma.subAccount.findUnique({
+      where: { agencyId_ghlLocationId: { agencyId, ghlLocationId: locationId } },
+    });
+    if (existing?.status === "ACTIVE") return existing; // idempotent
+
+    const row = existing
+      ? await prisma.subAccount.update({
+          where: { id: existing.id },
+          data: { status: "ACTIVE", decidedAt: new Date(), decidedById: actorId, rejectionComment: null },
+        })
+      : await prisma.subAccount.create({
+          data: {
+            agencyId,
+            ghlLocationId: locationId,
+            name: location.name || locationId,
+            contactEmail: location.email ?? null,
+            status: "ACTIVE",
+            decidedAt: new Date(),
+            decidedById: actorId,
+          },
+        });
+
+    await logAudit({
+      agencyId,
+      actorId,
+      action: "SUB_ACCOUNT_CONNECTED",
+      entityType: "SubAccount",
+      entityId: row.id,
+      details: `Owner connected ${row.name} (${locationId}) directly from the GHL location list`,
+    });
+    return row;
+  }
+
   async listRequests(agencyId: string) {
     return prisma.subAccount.findMany({
       where: { agencyId, status: "PENDING" },

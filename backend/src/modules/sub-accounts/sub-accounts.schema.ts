@@ -6,6 +6,12 @@ export const rejectSchema = z.object({
   }),
 });
 
+export const connectLocationSchema = z.object({
+  body: z.object({
+    locationId: z.string().trim().min(1).max(100),
+  }),
+});
+
 export const decisionParamsSchema = z.object({
   body: z.object({}).passthrough().optional(),
   params: z.object({

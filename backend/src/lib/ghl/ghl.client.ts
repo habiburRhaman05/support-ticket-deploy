@@ -16,9 +16,16 @@ import { env } from "../../utils/envConfig";
  *   - GET /locations/search  ("Search Sub-Account", takes companyId)
  *   - GET /locations/{locationId}
  *
- * ASSUMED — confirm with a real token via `pnpm tsx scripts/verify-ghl.ts`:
- *   - Exact response shapes of both endpoints (fields used are defensive)
- *   - Required scopes (expected: locations.readonly)
+ * VERIFIED LIVE (2026-07-12, real agency PIT against production GHL):
+ *   - GET /locations/search returns 200 with the PIT alone — companyId query
+ *     param is OPTIONAL for an agency-scoped token (company inferred from it)
+ *   - Response shape confirmed: { locations: [{ id, companyId, name, email,
+ *     address, city, state, country, timezone, ... }] }
+ *   - Each location carries the agency's real companyId (an alphanumeric ID,
+ *     e.g. "Ge4r..." — NOT the X-XXX-XXX "Relationship Number" shown in the
+ *     GHL support UI), so the companyId can be DISCOVERED from the token
+ *
+ * ASSUMED — pending live confirmation:
  *   - Rate limits (client throttles conservatively until confirmed)
  */
 
@@ -110,13 +117,28 @@ interface GetLocationResponse {
 
 export const ghlClient = {
 
-  async searchLocations(apiKey: string, companyId: string, limit = 100, skip = 0): Promise<GhlLocation[]> {
+  /**
+   * GET /locations/search — companyId is optional for an agency PIT (VERIFIED
+   * LIVE: the token itself scopes the search to its own agency).
+   */
+  async searchLocations(apiKey: string, companyId?: string, limit = 100, skip = 0): Promise<GhlLocation[]> {
     const data = await ghlGet<SearchLocationsResponse>({
       apiKey,
       path: "/locations/search",
       query: { companyId, limit, skip },
     });
     return data.locations ?? [];
+  },
+
+  /**
+   * Discovers the agency's real companyId from the token alone: searches one
+   * location (no companyId param) and reads companyId off the result. Returns
+   * null when the agency has no locations yet (nothing to read it from).
+   * Throws GhlApiError on auth failures — callers surface those as key errors.
+   */
+  async discoverCompanyId(apiKey: string): Promise<string | null> {
+    const locations = await this.searchLocations(apiKey, undefined, 1, 0);
+    return locations[0]?.companyId ?? null;
   },
 
 
@@ -142,6 +164,16 @@ export const ghlClient = {
   },
 
 
+  /**
+   * GET /locations/{locationId} — returns null when the location is not
+   * available under this token's agency.
+   *
+   * VERIFIED LIVE (2026-07-12): GHL answers 403 "Forbidden resource" BOTH for
+   * a location that belongs to another agency AND for a completely made-up ID
+   * (never 404). So 403 here means "not yours / doesn't exist" — NOT a bad
+   * key — and must map to null, or the portal would misreport a foreign
+   * location_id as a revoked API key. 401 alone means the token itself is bad.
+   */
   async getLocation(apiKey: string, locationId: string): Promise<GhlLocation | null> {
     try {
       const data = await ghlGet<GetLocationResponse>({
@@ -151,8 +183,15 @@ export const ghlClient = {
       return data.location ?? null;
     } catch (err) {
       if (err instanceof GhlApiError) {
-        if (err.httpStatus === 404 || err.httpStatus === 400 || err.httpStatus === 422) return null;
-        if (err.httpStatus === 401 || err.httpStatus === 403) {
+        if (
+          err.httpStatus === 403 ||
+          err.httpStatus === 404 ||
+          err.httpStatus === 400 ||
+          err.httpStatus === 422
+        ) {
+          return null;
+        }
+        if (err.httpStatus === 401) {
           throw unauthorized("The agency's GHL API key was rejected — it may have been rotated or revoked.", "GHL_KEY_INVALID");
         }
         if (err.httpStatus === 0) {

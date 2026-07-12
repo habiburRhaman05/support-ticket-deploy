@@ -30,6 +30,11 @@ const envSchema = z.object({
   GHL_API_BASE_URL: z.string().url().default("https://services.leadconnectorhq.com"),
   GHL_API_VERSION: z.string().default("2021-07-28"),
 
+  // Inputs for the one-time live verification script (ghlscripts/verify-ghl.ts).
+  // Never used by the app itself — safe to leave unset in production.
+  GHL_VERIFY_API_KEY: z.string().optional(),
+  GHL_VERIFY_LOCATION_ID: z.string().optional(),
+
   COMMON_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(1000),
 
   COMMON_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(1000),

@@ -25,7 +25,11 @@ export function useAuth() {
 
   const token = typeof window !== "undefined" ? tokenStorage.getAccessToken() : undefined
 
-  const { data: me, isError: meError } = useQuery({
+  const {
+    data: me,
+    isError: meError,
+    isPending: mePending,
+  } = useQuery({
     queryKey: QUERY_KEYS.AUTH.ME,
     queryFn: async () => {
       const userData = await AuthService.getMe()
@@ -36,6 +40,12 @@ export function useAuth() {
     retry: false,
     staleTime: 5 * 60 * 1000,
   })
+
+  // A full page refresh wipes Redux but NOT the token in localStorage. While
+  // that stored token is being re-validated via /auth/me, the session counts
+  // as loading — otherwise AuthGuard sees "not authenticated" for a moment
+  // and wrongly bounces a logged-in user to /login on every refresh.
+  const isRestoringSession = !!token && !user && mePending && !meError
 
   useEffect(() => {
     if (meError) {
@@ -149,7 +159,7 @@ export function useAuth() {
   return {
     user: user ?? me ?? undefined,
     isAuthenticated: isAuthenticated || !!me,
-    isLoading,
+    isLoading: isLoading || isRestoringSession,
     isOwner,
     isTeamMember,
     isSubAccount,

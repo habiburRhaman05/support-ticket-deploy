@@ -20,9 +20,28 @@ export class SubAccountsController {
     }
   }
 
+  async overview(req: Request, res: Response, next: NextFunction) {
+    try {
+      const forceRefresh = req.query.refresh === "true";
+      const data = await subAccountsService.overview(req.user!.agencyId, forceRefresh);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async connectLocation(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await subAccountsService.connectLocation(req.user!.agencyId, req.user!.userId, req.body.locationId);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async approve(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await subAccountsService.approve(req.user!.agencyId, req.user!.userId, req.params.id);
+      const data = await subAccountsService.approve(req.user!.agencyId, req.user!.userId, String(req.params.id));
       res.json({ success: true, data });
     } catch (error) {
       next(error);
@@ -31,7 +50,7 @@ export class SubAccountsController {
 
   async reject(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await subAccountsService.reject(req.user!.agencyId, req.user!.userId, req.params.id, req.body?.comment);
+      const data = await subAccountsService.reject(req.user!.agencyId, req.user!.userId, String(req.params.id), req.body?.comment);
       res.json({ success: true, data });
     } catch (error) {
       next(error);
